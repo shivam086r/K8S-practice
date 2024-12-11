@@ -1,0 +1,17 @@
+######## Cluster Creation via EKSCTL ########
+
+--> Install eksctl cli tool
+ 
+      --> Docs - https://github.com/eksctl-io/eksctl
+	  
+--> aws configure
+
+eksctl create cluster \
+> --name demo-cluster \
+> --version 1.30 \
+> --region us-west-1 \
+> --nodegroup-name demo-nodes \
+> --node-type t2.micro \
+> --node 2 \
+> --node-min 1 \
+> --node-max 3 \
