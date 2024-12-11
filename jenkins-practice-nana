@@ -1,0 +1,354 @@
+### lecture-88 ###
+
+sudo apt update
+
+apt install docker.io -y
+
+docker
+
+docker run -p 8080:8080 -p 50000:50000 -d -v jenkins_home:/var/jenkins_home jenkins/jenkins:lts
+
+docker ps
+
+ip:8080  ##on browser
+
+docker exec -it <container name/id> bash
+
+cat /var/jenkins_home/secrets/initialAdminPassword
+
+exit
+
+docker volume inspact jenkins_home
+
+ls /var/lib/docker/volume/jenkins_home/_data
+
+cat /var/lib/docker/volume/jenkins_home/_data/secrets
+
+--> pasting password on jenkins
+   
+   --> install suggested plugins
+   --> create first admin user
+
+
+
+### lecture-90 ###
+
+---> configure plugin for maven
+
+     --> manage jenkins --> global tool configuration 
+     --> maven--> add maven
+       -install automatically
+        - name - maven 3.8
+        - version - 3.8 
+
+ ---> ####installing npm via cli inside the container##
+
+
+docker ps
+
+docker exec -it -u -0 <container name/id> bash #(going inside the container as a root user)
+
+cat /etc/issue
+
+apt update
+
+apt install curl
+
+curl -fsSL https://deb.nodesource.com/setup_20.x -o nodesource_setup.sh
+
+ls
+
+bash nodesource_setup.sh
+
+apt install nodejs
+
+nodejs -v
+
+npm -v
+
+
+
+### lecture-91 ###
+
+---> install nodejs plugin  
+
+     --> manage jenkins --> manage plugins
+
+     available --> search nodejs --> install
+
+---> configure plugin for nodejs
+
+     --> manage jenkins --> global tool configuration 
+     --> nodejs--> add nodejs
+       -install automatically
+        - name - nodejs 18
+        - version - nodejs 18
+
+    ### now execute nodejs script option available for build job
+
+
+
+
+### Docker in jenkins ###
+
+--> make docker available in jenkins to run docker command in jenkins
+
+docker ps 
+
+docker stop <container name>
+
+#### creating new container moving all the data from volume to inside the new container 
+
+docker volume ls
+
+docker  run -p 8080:8080 -p 50000:50000 -d \
+> -v jenkins_home:/var/jenkins_home \
+> /var/run/docker.sock:/var/run/docker.sock \
+> -v $(which docker):/usr/bin/docker jenkins/jenkins:lts
+
+docker ps
+
+docker exec -it <container name/id> bash
+
+docker
+
+docker pull redis --> permission error
+
+ls -l /var/run/docker.sock
+
+exit
+
+docker ps
+
+docker exec -u 0-it <container name/id> bash
+
+chmod 666 /var/run/docker.sock
+
+exit
+
+docker exec -it <container name/id> bash
+
+docker pull redis
+
+
+
+#### Lecture - 101 webhook ####
+
+search and add Gitlab build trigger plugin than configure it on jenkins
+
+go to gitlab--> integretion--> jenkinsCI--> connfigure jenkins url, username, passwd
+
+
+
+### Lecture - 112 AWS and Jenkins part-1 ####
+
+search and add ssh agent plugin
+
+adding credentials
+  kind - ssh username with private-key
+  id - ec2-server-key
+  username - ec2-user
+  private-key - paste private-key content
+
+configure ssh-agent on jenkinsfile in deploy stage
+
+
+
+### lecture-150 Deploy to eks cluster via Jenkins ###
+
+--> cluster should be available with 2 nodes
+ 
+--> install kubectl command line tool inside jenkins container
+--> install aws-iam-authenticator inside jenkins container
+--> create kebeconfig file to connect to eks cluster
+      --> authenticate with aws account 
+	  --> authenticate with K8s cluster
+
+  ls .kube/config
+  kubectl get nodes
+  
+--> add AWS credentialson jenkins for aws account authentication
+         -->AWS user
+		 
+--> Adjust Jenkinsfile to configure EKS cluster deployment
+
+
+ssh -i sshkey user@ip
+
+docker ps
+docker exec -u 0 -it <containerID> bash
+
+
+######## Step-1 Install Kubectl ######
+
+curl -LO curl -LO https://storage.googleapis.com/kubernetes-release/release/$\(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt\)/bin/linux/amd64/kubectl; chmod =x .kubectl; mv ./kubectl /usr/local/bin/kubectl    ##this url install kubectl inside jenkins container
+
+
+######## Step-2 Install AWS-IAM-Authenticator ######
+
+curl -o aws-iam-authenticator https://amazon-eks.s3.us-west-2.amazonaws.com/1.15.10/2020-02-22/bin/linux/amd64/aws-iam-authenticator
+chmod +x ./aws-iam-authenticator
+sudo mv ./aws-iam-authenticator /usr/local/bin
+aws-iam-authenticator help
+
+
+######## Step-3 create kubeconfig file  ######
+
+--> Note: we dont have vim editior inside our lightweight jenkins container and other tools thats why we are gonna create kubeconfig file outside on host ec2 and copying it inside jenkins container
+
+vim config     #Paste content of kebeconfig file
+   --> updating values  --> K8s cluster name
+   --> video- 10:00     --> API Server Endpoint
+						--> certificate-authority-data (available on cat .kube/config)
+						
+docker ps -a
+docker exec it <containerID> bash
+cd
+pwd    --> output: /var/jenkins_home
+mkdir .kube
+exit
+
+docker cp config <containerID>:/var/jenkins_home/.kube ##copying file from ec2 instance to inside Jenkins container
+docker exec it <containerID> bash
+cd
+ls -a
+ls .kube/
+cat .kube/config
+exit
+
+
+######## Step-4 Adding AWS Credentials on Jenkins inside Global Credentials ######
+
+    --> Best Practice: Creating AWS Iam user for jenkins with limited permissions but we are using admin user
+	--> Timer : 17: 00
+	--> adding -- As Secret Text
+	        --> jenkins_aws_access_key_id
+			--> jenkins_aws_secret_access_key
+
+###### Step-5 Making changes in Jenkinsfile######
+
+    -->  Timer 19:10 {Pipeline}
+	
+#!/usr/bin/env groovy
+
+pipeline {
+    agent any
+    stages {
+        stage('build app') {
+            steps {
+               script {
+                   echo "building the application..."
+               }
+            }
+        }
+        stage('build image') {
+            steps {
+                script {
+                    echo "building the docker image..."
+                }
+            }
+        }
+        stage('deploy') {
+            environment {
+               AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
+               AWS_SECRET_ACCESS_KEY = credentials('jenkins_aws_secret_access_key')
+            }
+            steps {
+                script {
+                   echo 'deploying docker image...'
+                   sh 'kubectl create deployment nginx-deployment --image=nginx'
+                }
+            }
+        }
+    }
+}
+
+
+######### Lecture- 154 Deploying image from ECR to EKS via Jenkins ########
+
+Step-1 Create ECR Repo
+
+Step-2 Create AWS Credential in jenkins
+
+Step-3 Adjust Building and tagging image
+
+Step-4 Create K8S Secrets for ECR image pull and mentioning on menifest file
+
+Step- Updating Jenkinsfile
+
+#!/usr/bin/env groovy
+
+pipeline {
+    agent any
+    tools {
+        maven 'Maven'
+    }
+    environment {
+        ECR_REPO_URL = '664574038682.dkr.ecr.eu-west-3.amazonaws.com'
+        IMAGE_REPO = "${ECR_REPO_URL}/java-maven-app"
+    }
+    stages {
+        stage('increment version') {
+            steps {
+                script {
+                    echo 'incrementing app version...'
+                    sh 'mvn build-helper:parse-version versions:set \
+                        -DnewVersion=\\\${parsedVersion.majorVersion}.\\\${parsedVersion.minorVersion}.\\\${parsedVersion.nextIncrementalVersion} \
+                        versions:commit'
+                    def matcher = readFile('pom.xml') =~ '<version>(.+)</version>'
+                    def version = matcher[0][1]
+                    env.IMAGE_NAME = "$version-$BUILD_NUMBER"
+                    echo "############ ${IMAGE_REPO}"
+                }
+            }
+        }
+        stage('build app') {
+            steps {
+               script {
+                   echo "building the application..."
+                   sh 'mvn clean package'
+               }
+            }
+        }
+        stage('build image') {
+            steps {
+                script {
+                    echo "building the docker image..."
+                    withCredentials([usernamePassword(credentialsId: 'ecr-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
+                        sh "docker build -t ${IMAGE_REPO}:${IMAGE_NAME} ."
+                        sh "echo $PASS | docker login -u $USER --password-stdin ${ECR_REPO_URL}"
+                        sh "docker push ${IMAGE_REPO}:${IMAGE_NAME}"
+                    }
+                }
+            }
+        }
+        stage('deploy') {
+            environment {
+                AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
+                AWS_SECRET_ACCESS_KEY = credentials('jenkins_aws_secret_access_key')
+                APP_NAME = 'java-maven-app'
+            }
+            steps {
+                script {
+                    echo 'deploying docker image...'
+                    sh 'envsubst < kubernetes/deployment.yaml | kubectl apply -f -'
+                    sh 'envsubst < kubernetes/service.yaml | kubectl apply -f -'
+                }
+            }
+        }
+        stage('commit version update') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'gitlab-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
+                        sh 'git config user.email "jenkins@example.com"'
+                        sh 'git config user.name "Jenkins"'
+                        sh "git remote set-url origin https://${USER}:${PASS}@gitlab.com/nanuchi/java-maven-app.git"
+                        sh 'git add .'
+                        sh 'git commit -m "ci: version bump"'
+                        sh 'git push origin HEAD:jenkins-jobs'
+                    }
+                }
+            }
+        }
+    }
+}
