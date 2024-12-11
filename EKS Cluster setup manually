@@ -1,0 +1,118 @@
+##### EKS Cluster setup #####
+
+1 --> creating IAM role for EKS service
+
+        --> EKSClusterRole
+		--> use case - Eks Cluster
+
+2 --> creating VPC for worker nodes
+
+       --> Creating via cloudformation template
+	   
+	   --> Template url - https://s3.us-west-2.amazonaws.com/amazon-eks/cloudformation/2020-10-29/amazon-eks-vpc-private-subnets.yaml
+	   
+	               --> EKS-Worker-Node-Vpc-Stack
+
+3 --> create EKS cluster (master node) 
+     
+	     --> Cluster Name - Eks-cluster-test
+		 --> Select Role
+		 --> Select vpc
+		 --> Cluster endpoint access - Public and private
+		 
+
+4 --> connect Kubectl with EKS Cluster
+
+         -- aws configure
+		 -- aws configure list
+		 -- aws eks-update-kubeconfig --name <cluster-name>
+		 -- cat .kube/config 
+		 -- kubectl grt ns
+		 -- kubectl cluster-info
+
+5 --> create ec2 IAM Role for Node Group
+
+        --> EKSWorkerNodeRole
+		--> use case - EC2
+		--> Policy - AmazonEksWorkerNodePolicy, AmazonEC2ContainerRegistryReadOnly
+		             AmazonEks_CNI-Policy
+
+6 --> create Node group and attach to eks cluster
+       
+	   Compute--> Node Group --> Create Node Group
+	   
+		 --> name
+		 --> Select Role
+		 --> provide instance size and autoscaling configuration
+		 --> Create Key pairs for nodes
+		 
+		 -- kubectl get nodes
+	   
+
+7 --> configure auto-scaling for EKS cluster
+       
+	     --> Creating Autoscaling policy and attaching it to existing node group role
+		 
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeLaunchConfigurations",
+        "ec2:DescribeAutoScalingGroups",
+        "autoscaling:DescribeAutoScalingGroups",
+        "autoscaling:UpdateAutoScalingGroup",
+        "autoscaling:SetDesiredCapacity",
+        "autoscaling:DescribeAutoScalingInstances",
+        "autoscaling:PutLifecycleHook",
+        "autoscaling:CompleteLifecycleAction"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+
+kubectl apply -f https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/cloudprovider/aws/examples/cluster-autoscaler-autodiscover.yaml
+ Note-- {video timing 11:00}		 
+       --> kubectl get deployment -n kube-system cluster-autoscale
+
+       --> kubectl edit deployment -n kube-system cluster-autoscale
+
+       --> adding annotation --> cluster-autoscaler.kubernetes.io/safe-to-ecict="false"
+       --> adding cluster name and few more details
+   
+       --> kubectl get pods -n kube-system
+   
+       --> kubectl get pod <pod-name> -n kube-system -o wide
+   
+       --> kubectl get logs -n kube-system <pod-name>
+   
+
+8 --> deploy our application on EKS cluster
+       
+	   --> creating deployment and service manifest file for nginx
+	   
+       --> kubectl apply -f nginx-config.yaml
+	   
+	   --> kubectl get pods
+	   
+	   --> kubectl get svc
+	   
+	   --> accessing it via loadbalancer URL
+	   
+	   --> increasing the no. of replica to 20 on manifest files to check autoscaling
+	   
+	   --> kubectl get logs -n kube-system <pod-name>
+	   
+	   --> kubectl get nodes 
